@@ -25,7 +25,13 @@ class SGD(Optimizer):
 
     def step(self):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        for param in self.params:
+            # 注意weight decay的本质是在loss上考虑权重大小，所以他的求导结果也属于权重gradient的一部分
+            # PDF上使用weight decay的最终式子只针对不使用momentum的vanilla SGD
+            grad = ndl.Tensor(param.grad, dtype='float32').data + self.weight_decay * param.data
+            u_t_plus_1 = self.momentum * self.u.get(param, 0) + (1 - self.momentum) * grad
+            param.data = param.data - self.lr * u_t_plus_1
+            self.u[param] = u_t_plus_1
         ### END YOUR SOLUTION
 
     def clip_grad_norm(self, max_norm=0.25):
@@ -60,5 +66,14 @@ class Adam(Optimizer):
 
     def step(self):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        self.t += 1
+        for param in self.params:
+            grad = ndl.Tensor(param.grad, dtype='float32').data + self.weight_decay * param.data
+            m_t_plus_1 = self.beta1 * self.m.get(param, 0) + (1 - self.beta1) * grad
+            v_t_plus_1 = self.beta2 * self.v.get(param, 0) + (1 - self.beta2) * grad ** 2
+            m_t_plus_1_correction = m_t_plus_1 / (1 - self.beta1 ** self.t)
+            v_t_plus_1_correction = v_t_plus_1 / (1 - self.beta2 ** self.t)
+            param.data = param.data - self.lr * m_t_plus_1_correction / (v_t_plus_1_correction ** 0.5 + self.eps)
+            self.m[param] = m_t_plus_1
+            self.v[param] = v_t_plus_1
         ### END YOUR SOLUTION

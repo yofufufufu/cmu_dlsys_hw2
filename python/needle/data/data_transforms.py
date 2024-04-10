@@ -20,7 +20,11 @@ class RandomFlipHorizontal(Transform):
         """
         flip_img = np.random.rand() < self.p
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        # 水平翻转本质上可以通过旋转180度(矩阵转置)再垂直翻转(矩阵行逆序排列)实现
+        if flip_img:
+            # H(height) x W(width) x C(channel), 注意排列的方法不是 C x H x W
+            return np.flip(img, axis=1)
+        return img
         ### END YOUR SOLUTION
 
 
@@ -36,7 +40,15 @@ class RandomCrop(Transform):
             H x W x C NAArray of cliped image
         Note: generate the image shifted by shift_x, shift_y specified below
         """
+        # shift ∈ [-3, 4). 初始位置从图的左上角开始，下和右为正. 超出原图的部分采用zero padding
         shift_x, shift_y = np.random.randint(low=-self.padding, high=self.padding+1, size=2)
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        img_pad = np.zeros_like(img)
+        H, W = img.shape[0], img.shape[1]
+        if abs(shift_x) >= H or abs(shift_y) >= W:
+            return img_pad
+        img_pad[max(0, -shift_x):min(H - shift_x, H),
+                max(0, -shift_y):min(W - shift_y, W), :] = img[max(0, shift_x):min(H + shift_x, H),
+                                                               max(0, shift_y):min(W + shift_y, W), :]
+        return img_pad
         ### END YOUR SOLUTION

@@ -1,6 +1,7 @@
 import sys
 
-sys.path.append("./python")
+sys.path.append("/home/tang22/CMU_DLSys/cmu_dlsys_hw2/python")
+sys.path.append("/home/tang22/CMU_DLSys/cmu_dlsys_hw2/apps")
 import needle as ndl
 import numpy as np
 

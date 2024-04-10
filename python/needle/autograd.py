@@ -1,7 +1,7 @@
 """Core data structures."""
 import needle
 from .backend_numpy import Device, cpu, all_devices
-from typing import List, Optional, NamedTuple, Tuple, Union
+from typing import List, Optional, NamedTuple, Tuple, Union, Dict
 from collections import namedtuple
 import numpy
 
@@ -13,10 +13,9 @@ TENSOR_COUNTER = 0
 
 # NOTE: we will import numpy as the array_api
 # as the backend for our computations, this line will change in later homeworks
-
 import numpy as array_api
-NDArray = numpy.ndarray
 
+NDArray = numpy.ndarray
 
 
 class Op:
@@ -25,6 +24,7 @@ class Op:
     def __call__(self, *args):
         raise NotImplementedError()
 
+    # 不同的TensorOp重写以下两个方法
     def compute(self, *args: Tuple[NDArray]):
         """Calculate forward pass of operator.
 
@@ -105,6 +105,7 @@ class Value:
             return self.cached_data
         # note: data implicitly calls realized cached data
         self.cached_data = self.op.compute(
+            # 计算时使用的是所有input的cache_data值(NDArray)，因此可以使用numpy方法
             *[x.realize_cached_data() for x in self.inputs]
         )
         return self.cached_data
@@ -233,6 +234,7 @@ class Tensor(Value):
         return array_api.array(numpy_array, device=device, dtype=dtype)
 
     @staticmethod
+    # 前向和反向过程中的每次计算都是一个建图的过程
     def make_from_op(op: Op, inputs: List["Value"]):
         tensor = Tensor.__new__(Tensor)
         tensor._init(op, inputs)
@@ -381,7 +383,22 @@ def compute_gradient_of_variables(output_tensor, out_grad):
     reverse_topo_order = list(reversed(find_topo_sort([output_tensor])))
 
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    for node in reverse_topo_order:
+        # sum_partial_adjoints
+        # https://github.com/dlsyscourse/hw2/issues/11
+        node_grads = node_to_output_grads_list[node]
+        node.grad = node_grads[0] if len(node_grads) == 1 else sum(node_grads)
+        # leaf do not need to backward
+        if node.is_leaf():
+            continue
+        # calculate node gradient to inputs
+        out_grads_to_inputs = node.op.gradient_as_tuple(out_grad=node.grad, node=node)
+        for index, input_node in enumerate(node.inputs):
+            # init
+            if input_node not in node_to_output_grads_list:
+                node_to_output_grads_list[input_node] = []
+            # op的compute和gradient函数中保证input和gradient的顺序是对应的即可
+            node_to_output_grads_list[input_node].append(out_grads_to_inputs[index])
     ### END YOUR SOLUTION
 
 
@@ -394,14 +411,30 @@ def find_topo_sort(node_list: List[Value]) -> List[Value]:
     sort.
     """
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    result_topo_order = []
+    visited_node = []
+    # 从最后的输出开始
+    for output_node in node_list:
+        topo_sort_dfs(output_node, visited_node, result_topo_order)
+    return result_topo_order
     ### END YOUR SOLUTION
 
 
+# 没想明白visited有什么用，可以通过判断node是否在topo_order中判断node是否被visited
 def topo_sort_dfs(node, visited, topo_order):
     """Post-order DFS"""
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    if node.is_leaf():
+        topo_order.append(node)
+        visited.append(node)
+        return
+    for input_node in node.inputs:
+        if input_node in visited:
+            continue
+        visited.append(input_node)
+        topo_sort_dfs(input_node, visited, topo_order)
+    topo_order.append(node)
+    return
     ### END YOUR SOLUTION
 
 

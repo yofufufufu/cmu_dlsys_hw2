@@ -88,26 +88,40 @@ class Linear(Module):
         self.out_features = out_features
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        self.weight = Parameter(init.kaiming_uniform(in_features, out_features, dtype=dtype))
+        if bias:
+            # fan_in的值影响到init的结果，所以必须按照作业的提示，取fan_in=out_features，再对结果reshape
+            # 对parameter reshape会导致sgd过不了test，但是先对tensor reshape就可以，为什么？
+            # self.bias = Parameter(init.kaiming_uniform(out_features, 1, dtype=dtype)).reshape((1, out_features))
+            self.bias = Parameter(init.kaiming_uniform(out_features, 1, dtype=dtype).reshape((1, out_features)))
+        else:
+            self.bias = None
         ### END YOUR SOLUTION
 
     def forward(self, X: Tensor) -> Tensor:
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        mat_mul_res = X @ self.weight
+        if self.bias:
+            return mat_mul_res + self.bias.broadcast_to(mat_mul_res.shape)
+        return mat_mul_res
         ### END YOUR SOLUTION
 
 
 class Flatten(Module):
     def forward(self, X):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        batch_num = X.shape[0]
+        mul_dim = 1
+        for dim in X.shape[1:]:
+            mul_dim *= dim
+        return X.reshape((batch_num, mul_dim))
         ### END YOUR SOLUTION
 
 
 class ReLU(Module):
     def forward(self, x: Tensor) -> Tensor:
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return ops.relu(x)
         ### END YOUR SOLUTION
 
 
@@ -118,14 +132,24 @@ class Sequential(Module):
 
     def forward(self, x: Tensor) -> Tensor:
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        for module in self.modules:
+            x = module(x)
+        return x
         ### END YOUR SOLUTION
 
 
 class SoftmaxLoss(Module):
     def forward(self, logits: Tensor, y: Tensor):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        # 数值稳定的实现，避免logits值太大导致exp计算溢出
+        class_num = logits.shape[1]
+        batch_num = logits.shape[0]
+        mask = init.one_hot(class_num, y)
+        batch_res = ops.logsumexp(logits, axes=(1, )) - (logits * mask).sum(axes=(1, ))
+        # batch_res.sum() / batch_num, (float32 / int) 会变成float64, 问题出在DivScalar
+        # https://numpy.org/doc/stable/reference/generated/numpy.result_type.html
+        # https://github.com/dlsyscourse/hw2/issues/11
+        return batch_res.sum() / batch_num
         ### END YOUR SOLUTION
 
 
@@ -136,12 +160,29 @@ class BatchNorm1d(Module):
         self.eps = eps
         self.momentum = momentum
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        self.weight = Parameter(init.ones(dim, requires_grad=True))
+        self.bias = Parameter(init.zeros(dim, requires_grad=True))
+        self.running_mean = init.zeros(dim, requires_grad=False)
+        self.running_var = init.ones(dim, requires_grad=False)
         ### END YOUR SOLUTION
 
     def forward(self, x: Tensor) -> Tensor:
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        # Train mode
+        if self.training:
+            batch_num = x.shape[0]
+            mean = (x.sum(axes=(0,)) / batch_num)
+            x_minus_mean = x - mean.broadcast_to(x.shape)
+            var = ((x_minus_mean ** 2).sum(axes=(0,)) / batch_num)
+            # 必须使用detach后的mean和var(即使用.data)，否则self.running_mean和self.running_var的require_grad属性会变为True
+            self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean.data
+            self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var.data
+            normed = (x - mean.broadcast_to(x.shape)) / (var.broadcast_to(x.shape) + self.eps) ** 0.5
+            return self.weight.broadcast_to(x.shape) * normed + self.bias.broadcast_to(x.shape)
+        # Eval mode
+        else:
+            normed = (x - self.running_mean.broadcast_to(x.shape)) / (self.running_var.broadcast_to(x.shape) + self.eps) ** 0.5
+            return self.weight.broadcast_to(x.shape) * normed + self.bias.broadcast_to(x.shape)
         ### END YOUR SOLUTION
 
 
@@ -151,12 +192,17 @@ class LayerNorm1d(Module):
         self.dim = dim
         self.eps = eps
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        self.weight = Parameter(init.ones(dim, requires_grad=True))
+        self.bias = Parameter(init.zeros(dim, requires_grad=True))
         ### END YOUR SOLUTION
 
     def forward(self, x: Tensor) -> Tensor:
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        batch_num = x.shape[0]
+        mean = (x.sum(axes=(1, )) / self.dim).reshape((batch_num, 1))
+        x_minus_mean = x - mean.broadcast_to(x.shape)
+        var = ((x_minus_mean ** 2).sum(axes=(1, )) / self.dim).reshape((batch_num, 1))
+        return self.weight.broadcast_to(x.shape) * (x - mean.broadcast_to(x.shape)) / (var.broadcast_to(x.shape) + self.eps) ** 0.5 + self.bias.broadcast_to(x.shape)
         ### END YOUR SOLUTION
 
 
@@ -167,7 +213,15 @@ class Dropout(Module):
 
     def forward(self, x: Tensor) -> Tensor:
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        # Train mode
+        if self.training:
+            # 用 * 解构
+            # 详见randb的实现，返回的就是一个mask tensor
+            mask = init.randb(*x.shape, p=1 - self.p)
+            return x / (1 - self.p) * mask
+        # Eval mode
+        else:
+            return x
         ### END YOUR SOLUTION
 
 
@@ -178,5 +232,5 @@ class Residual(Module):
 
     def forward(self, x: Tensor) -> Tensor:
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return self.fn(x) + x
         ### END YOUR SOLUTION
